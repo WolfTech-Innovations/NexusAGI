@@ -309,7 +309,7 @@ double calculateTokenScore(const string& prev_word, const string& prev_prev_word
 
 string generate_with_beam_search(string seed, int max_length, 
                                   const vector<double>& attention_context,
-                                  int beam_width = 128) {  // Increased from 5
+                                  int beam_width = 32) {  // Increased from 16
     
     // Better seed selection based on learned frequency
     vector<string> good_starts = {"i", "the", "my", "we", "this", "when", "how", "what", "you"};
@@ -2810,7 +2810,7 @@ void unified_consciousness_integration_engine(int generation){
             h.key_proj[j]=cl(h.key_proj[j],-1.0,1.0);
             h.value_proj[j]=cl(h.value_proj[j],-1.0,1.0);
         }
-        h.temperature = 32 + consciousness.differentiation_metric * 0.1;
+        h.temperature = 12 + consciousness.differentiation_metric * 0.8;
         h.dropout_rate=0.1-consciousness.phi_value*0.05;
         h.phi_attention_weights["phi"]=psi_new;
         h.phi_attention_weights["integration"]=consciousness.integrated_information;
