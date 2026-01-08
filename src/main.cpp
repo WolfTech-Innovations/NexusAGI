@@ -3047,7 +3047,97 @@ string selectCoherentSeed() {
     
     return "i"; // Fallback
 }
-
+void loadBootstrapCorpus(const string& filename) {
+    ifstream file(filename);
+    if(!file) {
+        cerr << "No bootstrap corpus found, using defaults" << endl;
+        return;
+    }
+    
+    string line;
+    int sentences_loaded = 0;
+    double base_valence = 0.7;  // Start optimistic
+    
+    while(getline(file, line)) {
+        // Skip comments and empty lines
+        if(line.empty() || line[0] == '#') continue;
+        
+        // Tokenize
+        vector<string> tokens;
+        stringstream ss(line);
+        string word;
+        
+        while(ss >> word) {
+            string normalized = word;
+            transform(normalized.begin(), normalized.end(), 
+                     normalized.begin(), ::tolower);
+            
+            // Remove punctuation
+            while(!normalized.empty() && 
+                  !isalnum(normalized.back())) {
+                normalized.pop_back();
+            }
+            
+            if(!normalized.empty()) {
+                tokens.push_back(normalized);
+            }
+        }
+        
+        if(tokens.size() < 3) continue;  // Skip too-short sentences
+        
+        // Learn words with context
+        for(const string& tok : tokens) {
+            learnWord(tok, base_valence);
+        }
+        
+        // Learn n-grams (THIS IS KEY)
+        processNGramsFromTokens(tokens);
+        
+        // Form concept from sentence
+        if(tokens.size() >= 4 && sentences_loaded % 3 == 0) {
+            vector<string> concept_words;
+            // Extract meaningful words (skip articles, etc)
+            for(const string& tok : tokens) {
+                string pos = getPartOfSpeech(tok);
+                if(pos == "NOUN" || pos == "VERB" || 
+                   pos == "ADJECTIVE" || pos == "CONTENT") {
+                    concept_words.push_back(tok);
+                    if(concept_words.size() >= 4) break;
+                }
+            }
+            
+            if(concept_words.size() >= 2) {
+                string concept_name = "bootstrap_" + 
+                                     to_string(sentences_loaded);
+                createConceptAssociation(concept_name, 
+                                        concept_words);
+            }
+        }
+        
+        // Create episodic memory of learning
+        if(sentences_loaded % 10 == 0) {
+            string memory_content = "learned: " + 
+                                   tokens[0] + " " + 
+                                   (tokens.size() > 1 ? tokens[1] : "");
+            storeEpisodicMemory(memory_content, base_valence);
+        }
+        
+        sentences_loaded++;
+        
+        // Vary valence slightly for diversity
+        base_valence = 0.6 + (sentences_loaded % 5) * 0.05;
+    }
+    
+    file.close();
+    
+    cout << "[BOOTSTRAP] Loaded " << sentences_loaded 
+         << " sentences" << endl;
+    cout << "  - Vocabulary: " << token_concept_embedding_map.size() 
+         << " tokens" << endl;
+    cout << "  - Patterns: " << bigram_counts.size() 
+         << " bigrams" << endl;
+    cout << "  - Concepts: " << S.concepts.size() << endl;
+}
 void decay_token_frequencies() {
     // Decay token frequencies to prevent overused words from dominating
     for(auto& pair : token_concept_embedding_map) {
@@ -3345,6 +3435,7 @@ int main(){
                 mathLangAssociation();
                 bootstrapStrongPatterns();
                 bootstrapWithQualityExamples();
+                loadBootstrapCorpus("corpus.txt");
             } catch(const exception& e) {
                 cerr << "Error loading vocabulary: " << e.what() << endl;
             }
