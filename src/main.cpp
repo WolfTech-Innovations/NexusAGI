@@ -3433,9 +3433,9 @@ int main(){
             try {
                 loadEnglishDataset();
                 mathLangAssociation();
+                loadBootstrapCorpus("corpus.txt");
                 bootstrapStrongPatterns();
                 bootstrapWithQualityExamples();
-                loadBootstrapCorpus("corpus.txt");
             } catch(const exception& e) {
                 cerr << "Error loading vocabulary: " << e.what() << endl;
             }
