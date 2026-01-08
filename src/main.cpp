@@ -309,7 +309,7 @@ double calculateTokenScore(const string& prev_word, const string& prev_prev_word
 
 string generate_with_beam_search(string seed, int max_length, 
                                   const vector<double>& attention_context,
-                                  int beam_width = 32) {  // Increased from 16
+                                  int beam_width = 256) {  // Increased from 16
     
     // Better seed selection based on learned frequency
     vector<string> good_starts = {"i", "the", "my", "we", "this", "when", "how", "what", "you"};
@@ -2810,7 +2810,7 @@ void unified_consciousness_integration_engine(int generation){
             h.key_proj[j]=cl(h.key_proj[j],-1.0,1.0);
             h.value_proj[j]=cl(h.value_proj[j],-1.0,1.0);
         }
-        h.temperature = 12 + consciousness.differentiation_metric * 0.8;
+        h.temperature = 64 + consciousness.differentiation_metric * 0.8;
         h.dropout_rate=0.1-consciousness.phi_value*0.05;
         h.phi_attention_weights["phi"]=psi_new;
         h.phi_attention_weights["integration"]=consciousness.integrated_information;
@@ -3359,7 +3359,7 @@ void decay_qualia() {
 void decay_transformer_heads() {
     // Decay transformer head importance scores
     for(auto& head : transformer_heads) {
-        head.head_importance_score *= 0.98;
+        head.head_importance_score *= 0.88;
         
         // Decay weights toward neutral
         for(size_t i = 0; i < head.query_proj.size(); i++) {
@@ -3388,7 +3388,7 @@ void comprehensive_system_decay() {
     decay_transformer_heads();
     
     // Decay valence toward neutral
-    S.current_valence *= 0.995;
+    S.current_valence *= 0.545;
     
     // Decay metacognitive awareness slightly
     S.metacognitive_awareness *= 0.998;
