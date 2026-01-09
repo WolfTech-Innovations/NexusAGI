@@ -3436,6 +3436,7 @@ int main(){
                 loadBootstrapCorpus("corpus.txt");
                 loadBootstrapCorpus("corpus2.txt");
                 loadBootstrapCorpus("corpus3.txt");
+                loadBootstrapCorpus("corpus4.txt");
                 bootstrapStrongPatterns();
                 bootstrapWithQualityExamples();
             } catch(const exception& e) {
