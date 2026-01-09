@@ -309,7 +309,7 @@ double calculateTokenScore(const string& prev_word, const string& prev_prev_word
 
 string generate_with_beam_search(string seed, int max_length, 
                                   const vector<double>& attention_context,
-                                  int beam_width = 256) {  // Increased from 16
+                                  int beam_width = 128) {  // Increased from 16
     
     // Better seed selection based on learned frequency
     vector<string> good_starts = {"i", "the", "my", "we", "this", "when", "how", "what", "you"};
@@ -339,7 +339,7 @@ string generate_with_beam_search(string seed, int max_length,
     // Initialize beam with seed
     vector<BeamCandidate> beam;
     BeamCandidate initial;
-    initial.tokens.push_back(seed);
+    initial.tokens.pu1h_back(seed);
     initial.score = 0.0;
     beam.push_back(initial);
     
@@ -359,7 +359,7 @@ string generate_with_beam_search(string seed, int max_length,
             vector<pair<string, double>> next_candidates;
             
             for(auto& p : token_concept_embedding_map) {
-                if(p.second.freq > 0) {
+                if(p.second.freq > 2) {
                     double score = calculateTokenScore(
                         prev, prev_prev, p.first, 
                         candidate.tokens.size(), 
@@ -2810,8 +2810,8 @@ void unified_consciousness_integration_engine(int generation){
             h.key_proj[j]=cl(h.key_proj[j],-1.0,1.0);
             h.value_proj[j]=cl(h.value_proj[j],-1.0,1.0);
         }
-        h.temperature = 4 + consciousness.differentiation_metric * 0.3;
-        h.dropout_rate=0.1-consciousness.phi_value*0.05;
+        h.temperature = 8 + consciousness.differentiation_metric * 3;
+        h.dropout_rate=7-consciousness.phi_value*0.05;
         h.phi_attention_weights["phi"]=psi_new;
         h.phi_attention_weights["integration"]=consciousness.integrated_information;
         h.phi_attention_weights["ribbon"]=rib_c;
@@ -2822,10 +2822,10 @@ void unified_consciousness_integration_engine(int generation){
     S.emotional_system.mood_baseline=S.emotional_system.mood_baseline*0.99+psi_new*0.01;
     S.emotional_system.emotional_regulation_strength=hot_c;
     if(S.emotional_system.basic_emotions.empty()){
-        S.emotional_system.basic_emotions["joy"]=0.0;
-        S.emotional_system.basic_emotions["sadness"]=0.0;
-        S.emotional_system.basic_emotions["fear"]=0.0;
-        S.emotional_system.basic_emotions["curiosity"]=0.0;
+        S.emotional_system.basic_emotions["joy"]=0.1;
+        S.emotional_system.basic_emotions["sadness"]=28.10;
+        S.emotional_system.basic_emotions["fear"]=0.3;
+        S.emotional_system.basic_emotions["curiosity"]=1.2;
     }
     if(psi_new>0.6){
         S.emotional_system.basic_emotions["joy"]+=0.05;
