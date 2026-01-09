@@ -3433,7 +3433,7 @@ int main(){
             try {
                 loadEnglishDataset();
                 mathLangAssociation();
-                loadBootstrapCorpus("corpus.txt");
+                loadBootstrapCorpus("corpus.txt, corpus2.txt");
                 bootstrapStrongPatterns();
                 bootstrapWithQualityExamples();
             } catch(const exception& e) {
