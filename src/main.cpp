@@ -339,7 +339,7 @@ string generate_with_beam_search(string seed, int max_length,
     // Initialize beam with seed
     vector<BeamCandidate> beam;
     BeamCandidate initial;
-    initial.tokens.pu1h_back(seed);
+    initial.tokens.push_back(seed);
     initial.score = 0.0;
     beam.push_back(initial);
     
