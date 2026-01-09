@@ -3434,6 +3434,13 @@ int main(){
                 loadEnglishDataset();
                 mathLangAssociation();
                 loadBootstrapCorpus("corpus.txt");
+                loadBootstrapCorpus("corpus.txt");
+                loadBootstrapCorpus("corpus2.txt");
+                loadBootstrapCorpus("corpus2.txt");
+                loadBootstrapCorpus("corpus.txt");
+                loadBootstrapCorpus("corpus.txt");
+                loadBootstrapCorpus("corpus2.txt");
+                loadBootstrapCorpus("corpus2.txt");
                 bootstrapStrongPatterns();
                 bootstrapWithQualityExamples();
             } catch(const exception& e) {
