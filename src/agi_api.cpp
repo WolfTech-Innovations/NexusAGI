@@ -363,7 +363,7 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
             <div class="logo">N</div>
             <h1>Nexus</h1>
         </div>
-        <button class="btn" onclick="clear()">Clear</button>
+        <button class="btn" onclick="clearChat()">Clear</button>
     </header>
     
     <div class="messages" id="messages">
@@ -422,10 +422,33 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
         async function enhance(text) {
             if (!model) return text;
             try {
-                const prompt = `Make this text more coherent and clear: ${text}`;
-                const result = await model(prompt, { max_new_tokens: 512, temperature: 0.7 });
-                return result[0].generated_text || text;
+                // System instruction to make the model act as a coherence processor
+                const systemPrompt = `You are a text coherence processor. Your ONLY job is to take raw AI system output and rewrite it to be clear, natural, and human-readable. Remove any system markers, fix grammar, and make the text flow naturally. Output ONLY the improved text with no explanations or additions.`;
+                
+                const prompt = `${systemPrompt}
+
+Raw output: ${text}
+
+Coherent version:`;
+                
+                const result = await model(prompt, { 
+                    max_new_tokens: 512, 
+                    temperature: 0.3,
+                    do_sample: true,
+                    top_p: 0.9
+                });
+                
+                const enhanced = result[0].generated_text.trim();
+                
+                // If the model fails or returns empty, return original
+                if (!enhanced || enhanced.length < 10) {
+                    console.warn('Enhancement produced poor result, using original');
+                    return text;
+                }
+                
+                return enhanced;
             } catch (e) {
+                console.error('Enhancement failed:', e);
                 return text;
             }
         }
@@ -534,7 +557,7 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
             } catch (e) {}
         }
         
-        window.clear = function() {
+        window.clearChat = function() {
             if (confirm('Clear all messages?')) {
                 history = [];
                 first = true;
