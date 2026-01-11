@@ -394,6 +394,7 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
         
         env.allowLocalModels = false;
+        env.backends.onnx.wasm.numThreads = 1;
         
         let model = null;
         let loading = false;
@@ -410,39 +411,47 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
             if (model || loading) return;
             loading = true;
             try {
-                model = await pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-783M');
+                console.log('Loading tiny model...');
+                // Use the smallest possible model - Flan-T5 small (77MB)
+                model = await pipeline('text2text-generation', 'Xenova/flan-t5-small', {
+                    quantized: true,
+                    progress_callback: (progress) => {
+                        if (progress.status === 'progress') {
+                            console.log(`Loading: ${progress.file} - ${Math.round(progress.progress)}%`);
+                        }
+                    }
+                });
+                console.log('Model loaded successfully');
             } catch (e) {
                 console.error('Model load failed:', e);
+                model = null;
             }
             loading = false;
         }
         
-        initModel();
+        // Load model gradually after page loads
+        setTimeout(() => {
+            initModel();
+        }, 2000);
         
         async function enhance(text) {
-            if (!model) return text;
+            if (!model) {
+                console.warn('Model not ready, returning original text');
+                return text;
+            }
             try {
-                // System instruction to make the model act as a coherence processor
-                const systemPrompt = `You are a text coherence processor. Your ONLY job is to take raw AI system output and rewrite it to be clear, natural, and human-readable. Remove any system markers, fix grammar, and make the text flow naturally. Output ONLY the improved text with no explanations or additions.`;
-                
-                const prompt = `${systemPrompt}
-
-Raw output: ${text}
-
-Coherent version:`;
+                // Very simple prompt for the tiny model
+                const prompt = `Fix grammar and make readable: ${text}`;
                 
                 const result = await model(prompt, { 
-                    max_new_tokens: 512, 
+                    max_new_tokens: 256,
                     temperature: 0.3,
-                    do_sample: true,
-                    top_p: 0.9
+                    do_sample: false
                 });
                 
                 const enhanced = result[0].generated_text.trim();
                 
-                // If the model fails or returns empty, return original
-                if (!enhanced || enhanced.length < 10) {
-                    console.warn('Enhancement produced poor result, using original');
+                if (!enhanced || enhanced.length < 5) {
                     return text;
                 }
                 
@@ -492,10 +501,15 @@ Coherent version:`;
                 if (data.status === 'ok') {
                     let response = data.response;
                     
-                    // Always enhance with model before showing
+                    // Only enhance if model is ready, otherwise show original
                     if (model) {
                         typing.querySelector('span').textContent = 'Enhancing coherence';
-                        response = await enhance(response);
+                        try {
+                            response = await enhance(response);
+                        } catch (e) {
+                            console.error('Enhancement error:', e);
+                            // Fall back to original on error
+                        }
                     }
                     
                     typing.classList.remove('active');
