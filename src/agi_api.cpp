@@ -369,7 +369,7 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
     <div class="messages" id="messages">
         <div class="empty">
             <div class="empty-icon">N</div>
-            <div class="empty-text">Advanced AGI with coherence enhancement</div>
+            <div class="empty-text">Nexus</div>
         </div>
     </div>
     
@@ -385,6 +385,10 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
             <button class="send-btn" id="send">Send</button>
         </div>
     </div>
+    
+    <footer style="padding: 8px 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #e0e0e0; background: #fff;">
+        WolfTech Innovations
+    </footer>
     
     <script type="module">
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
@@ -461,23 +465,24 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
                 });
                 
                 const data = await res.json();
-                typing.classList.remove('active');
                 
                 if (data.status === 'ok') {
                     let response = data.response;
                     
+                    // Always enhance with model before showing
                     if (model) {
-                        typing.querySelector('span').textContent = 'Enhancing';
-                        typing.classList.add('active');
+                        typing.querySelector('span').textContent = 'Enhancing coherence';
                         response = await enhance(response);
-                        typing.classList.remove('active');
-                        typing.querySelector('span').textContent = 'Processing';
                     }
+                    
+                    typing.classList.remove('active');
+                    typing.querySelector('span').textContent = 'Processing';
                     
                     add('ai', response);
                     history.push({ role: 'ai', text: response, time: Date.now() });
                     save();
                 } else {
+                    typing.classList.remove('active');
                     add('ai', 'Error: ' + data.message);
                 }
             } catch (e) {
@@ -534,7 +539,7 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
                 history = [];
                 first = true;
                 localStorage.removeItem('nexus_history');
-                location.reload();
+                messages.innerHTML = '<div class="empty"><div class="empty-icon">N</div><div class="empty-text">Nexus</div></div>';
             }
         };
         
