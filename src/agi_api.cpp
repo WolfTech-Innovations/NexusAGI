@@ -411,10 +411,11 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
             if (model || loading) return;
             loading = true;
             try {
-                console.log('Loading tiny model...');
-                // Use the smallest possible model - Flan-T5 small (77MB)
-                model = await pipeline('text2text-generation', 'Xenova/flan-t5-small', {
-                    quantized: true,
+                console.log('Loading Qwen2.5-0.5B-Instruct model...');
+                // Use Qwen2.5 - much better quality, instruction-following model
+                model = await pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
+                    dtype: 'q4',
+                    device: 'wasm',
                     progress_callback: (progress) => {
                         if (progress.status === 'progress') {
                             console.log(`Loading: ${progress.file} - ${Math.round(progress.progress)}%`);
@@ -440,18 +441,29 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
                 return text;
             }
             try {
-                // Very simple prompt for the tiny model
-                const prompt = `Fix grammar and make readable: ${text}`;
+                // Use Qwen2.5's chat format for best results
+                const messages = [
+                    {
+                        role: 'system',
+                        content: 'You are a text processor. Rewrite the given text to be clear, grammatically correct, and natural. Only output the improved text, nothing else.'
+                    },
+                    {
+                        role: 'user',
+                        content: text
+                    }
+                ];
                 
-                const result = await model(prompt, { 
+                const output = await model(messages, {
                     max_new_tokens: 256,
                     temperature: 0.3,
                     do_sample: false
                 });
                 
-                const enhanced = result[0].generated_text.trim();
+                // Extract the assistant's response
+                const enhanced = output[0].generated_text.at(-1).content.trim();
                 
                 if (!enhanced || enhanced.length < 5) {
+                    console.warn('Enhancement produced poor result, using original');
                     return text;
                 }
                 
