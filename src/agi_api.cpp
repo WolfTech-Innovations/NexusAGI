@@ -441,36 +441,53 @@ HttpResponse AGI_API::handle_ui(const HttpRequest&) {
                 return text;
             }
             try {
+                // Pre-clean the text - remove obvious markers
+                let cleaned = text
+                    .replace(/\[NEXUS\]:\s*/gi, '')
+                    .replace(/\[positive\]/gi, '')
+                    .replace(/\[negative\]/gi, '')
+                    .replace(/\[neutral\]/gi, '')
+                    .trim();
+                
                 // Use Qwen2.5's chat format for best results
                 const messages = [
                     {
                         role: 'system',
-                        content: 'You are a text processor. Rewrite the given text to be clear, grammatically correct, and natural. Only output the improved text, nothing else.'
+                        content: 'You are a text clarity assistant. Your job is to take unclear or grammatically incorrect text and rewrite it to be clear, natural, and grammatically correct. Preserve the original meaning but make it sound natural and human. Only output the improved text.'
                     },
                     {
                         role: 'user',
-                        content: text
+                        content: `Rewrite this to be clear and natural: "${cleaned}"`
                     }
                 ];
                 
                 const output = await model(messages, {
                     max_new_tokens: 256,
-                    temperature: 0.3,
-                    do_sample: false
+                    temperature: 0.4,
+                    top_p: 0.9,
+                    do_sample: true
                 });
                 
                 // Extract the assistant's response
                 const enhanced = output[0].generated_text.at(-1).content.trim();
                 
-                if (!enhanced || enhanced.length < 5) {
-                    console.warn('Enhancement produced poor result, using original');
-                    return text;
+                // Remove any quotes the model might have added
+                const final = enhanced.replace(/^["']|["']$/g, '');
+                
+                if (!final || final.length < 5) {
+                    console.warn('Enhancement produced poor result, using cleaned version');
+                    return cleaned;
                 }
                 
-                return enhanced;
+                return final;
             } catch (e) {
                 console.error('Enhancement failed:', e);
-                return text;
+                // Return pre-cleaned version on error
+                return text.replace(/\[NEXUS\]:\s*/gi, '')
+                          .replace(/\[positive\]/gi, '')
+                          .replace(/\[negative\]/gi, '')
+                          .replace(/\[neutral\]/gi, '')
+                          .trim();
             }
         }
         
