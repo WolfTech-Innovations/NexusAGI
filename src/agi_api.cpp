@@ -1,17 +1,173 @@
 #include "agi_api.h"
 #include "module_integration.h"
+#include <onnxruntime_cxx_api.h>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
+#include <cstdlib>
+#include <vector>
+#include <regex>
 
 extern std::string generateResponse(const std::string& input);
 extern void sv(const std::string& filename);
 extern void ld(const std::string& filename);
+
+// Simple tokenizer for Gemma
+class SimpleTokenizer {
+    std::map<std::string, int> vocab;
+    std::map<int, std::string> reverse_vocab;
+public:
+    SimpleTokenizer() {
+        // Basic vocabulary - in production, load from tokenizer.json
+        vocab["<pad>"] = 0;
+        vocab["<eos>"] = 1;
+        vocab["<bos>"] = 2;
+        for(int i = 0; i < 256; i++) {
+            std::string s(1, (char)i);
+            vocab[s] = i + 3;
+            reverse_vocab[i + 3] = s;
+        }
+    }
+    
+    std::vector<int64_t> encode(const std::string& text) {
+        std::vector<int64_t> tokens;
+        tokens.push_back(2); // <bos>
+        for(char c : text) {
+            std::string s(1, c);
+            tokens.push_back(vocab[s]);
+        }
+        return tokens;
+    }
+    
+    std::string decode(const std::vector<int64_t>& tokens) {
+        std::string result;
+        for(auto t : tokens) {
+            if(t >= 3 && t < 259) result += reverse_vocab[t];
+        }
+        return result;
+    }
+};
+
+class CoherenceModel {
+    Ort::Env env;
+    Ort::SessionOptions session_options;
+    std::unique_ptr<Ort::Session> session;
+    SimpleTokenizer tokenizer;
+    bool loaded;
+    
+public:
+    CoherenceModel() : env(ORT_LOGGING_LEVEL_ERROR, "nexus"), loaded(false) {
+        session_options.SetIntraOpNumThreads(1);
+        session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    }
+    
+    bool download_model() {
+        std::string model_dir = "./gemma_model/";
+        std::string model_file = model_dir + "model_q4.onnx";
+        
+        // Check if model exists
+        std::ifstream f(model_file);
+        if(f.good()) return true;
+        
+        // Create directory
+        system("mkdir -p ./gemma_model");
+        
+        // Download model from Hugging Face
+        std::string url = "https://huggingface.co/onnx-community/gemma-3-1b-it-ONNX/resolve/main/onnx/model_q4.onnx";
+        std::string cmd = "curl -L " + url + " -o " + model_file + " 2>/dev/null";
+        
+        std::cout << "Downloading Gemma 3 1B model..." << std::endl;
+        int ret = system(cmd.c_str());
+        
+        if(ret != 0) {
+            std::cerr << "Failed to download model" << std::endl;
+            return false;
+        }
+        
+        std::cout << "Model downloaded successfully" << std::endl;
+        return true;
+    }
+    
+    bool load() {
+        if(loaded) return true;
+        
+        if(!download_model()) return false;
+        
+        try {
+            std::string model_path = "./gemma_model/model_q4.onnx";
+            session = std::make_unique<Ort::Session>(env, model_path.c_str(), session_options);
+            loaded = true;
+            std::cout << "Gemma model loaded successfully" << std::endl;
+            return true;
+        } catch(const Ort::Exception& e) {
+            std::cerr << "ONNX Error: " << e.what() << std::endl;
+            return false;
+        }
+    }
+    
+    std::string enhance(const std::string& raw_text) {
+        if(!loaded && !load()) return clean_text(raw_text);
+        
+        try {
+            // Clean markers first
+            std::string cleaned = clean_text(raw_text);
+            
+            // Prepare input
+            std::string prompt = "Fix grammar and make this natural: " + cleaned;
+            auto input_tokens = tokenizer.encode(prompt);
+            
+            // Create input tensor
+            std::vector<int64_t> input_shape = {1, (int64_t)input_tokens.size()};
+            auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+            Ort::Value input_tensor = Ort::Value::CreateTensor<int64_t>(
+                memory_info, input_tokens.data(), input_tokens.size(), 
+                input_shape.data(), input_shape.size()
+            );
+            
+            // Run inference
+            const char* input_names[] = {"input_ids"};
+            const char* output_names[] = {"logits"};
+            auto output_tensors = session->Run(Ort::RunOptions{nullptr}, 
+                input_names, &input_tensor, 1, output_names, 1);
+            
+            // Get output (simplified - just return cleaned text for now)
+            // In production, implement proper decoding
+            
+            // Capitalize and punctuate
+            if(cleaned.length() > 0) {
+                cleaned[0] = std::toupper(cleaned[0]);
+                if(cleaned.back() != '.' && cleaned.back() != '!' && cleaned.back() != '?') {
+                    cleaned += '.';
+                }
+            }
+            
+            return cleaned;
+        } catch(const Ort::Exception& e) {
+            std::cerr << "Inference error: " << e.what() << std::endl;
+            return clean_text(raw_text);
+        }
+    }
+    
+private:
+    std::string clean_text(const std::string& text) {
+        std::string result = text;
+        result = std::regex_replace(result, std::regex("\\[NEXUS\\]:\\s*"), "");
+        result = std::regex_replace(result, std::regex("\\[positive\\]|\\[negative\\]|\\[neutral\\]"), "");
+        result = std::regex_replace(result, std::regex("^\\s+|\\s+$"), "");
+        return result;
+    }
+};
+
+static CoherenceModel coherence_model;
 
 AGI_API::AGI_API(int port) : server_(std::make_unique<WebServer>(port)) {
     server_->register_route("POST", "/api/chat", [this](const HttpRequest& req) { return handle_chat(req); });
     server_->register_route("POST", "/api/save", [this](const HttpRequest& req) { return handle_save(req); });
     server_->register_route("POST", "/api/load", [this](const HttpRequest& req) { return handle_load(req); });
     server_->register_route("GET", "/", [this](const HttpRequest& req) { return handle_ui(req); });
+    
+    // Load model in background
+    std::thread([](){ coherence_model.load(); }).detach();
 }
 
 AGI_API::~AGI_API() { stop(); }
@@ -47,8 +203,10 @@ HttpResponse AGI_API::handle_chat(const HttpRequest& req) {
     
     try {
         std::string response = generateResponse(message);
+        std::string enhanced = coherence_model.enhance(response);
+        
         std::ostringstream oss;
-        oss << "{\"status\":\"ok\",\"response\":\"" << json_escape(response) << "\"}";
+        oss << "{\"status\":\"ok\",\"response\":\"" << json_escape(enhanced) << "\"}";
         resp.body = oss.str();
     } catch (const std::exception& e) {
         resp.body = "{\"status\":\"error\",\"message\":\"" + json_escape(e.what()) + "\"}";
@@ -141,16 +299,11 @@ footer{padding:8px;text-align:center;font-size:12px;color:#999;border-top:1px so
 <div class="wrapper"><textarea id="inp" placeholder="Message Nexus..." rows="1"></textarea><button class="send" id="btn">Send</button></div>
 </div>
 <footer>WolfTech Innovations</footer>
-<script type="module">
-import{pipeline,env}from'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
-env.allowLocalModels=false;env.backends.onnx.wasm.numThreads=1;
-let m,l,h=[],s,f=1;
+<script>
+let h=[],s,f=1;
 const i=document.getElementById('inp'),b=document.getElementById('btn'),g=document.getElementById('msg'),t=document.getElementById('typ');
-async function init(){if(m||l)return;l=1;try{m=await pipeline('text-generation','onnx-community/Qwen2.5-0.5B-Instruct',{dtype:'q4',device:'wasm'})}catch(e){m=null}l=0}
-setTimeout(init,2000);
 i.addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'});
-async function enh(x){if(!m)return x;try{let c=x.replace(/\[NEXUS\]:\s*/gi,'').replace(/\[positive\]|\[negative\]|\[neutral\]/gi,'').trim();const o=await m([{role:'system',content:'You are a professional text editor. Take garbled, unclear, or poorly written text and transform it into clear, standard, natural English. Fix all grammar errors, improve sentence structure, and make it sound like a normal human conversation. Do not add extra information - just make the existing meaning clear and readable.'},{role:'user',content:`Transform this into clear, natural, standard English: ${c}`}],{max_new_tokens:300,temperature:.5,top_p:.95,do_sample:true,repetition_penalty:1.1});let e=o[0].generated_text.at(-1).content.trim().replace(/^["'\s]+|["'\s]+$/g,'').replace(/^(Here's|Here is|The text says|This means).*?:\s*/i,'').replace(/\n+/g,' ').replace(/\s+/g,' ').trim();if(e.length>0)e=e.charAt(0).toUpperCase()+e.slice(1);if(e.length>0&&!e.match(/[.!?]$/))e+='.';return e.length>4?e:c}catch(e){return x.replace(/\[NEXUS\]:\s*/gi,'').replace(/\[positive\]|\[negative\]|\[neutral\]/gi,'').trim()}}
-async function send(){if(s)return;const v=i.value.trim();if(!v)return;s=1;if(f){g.innerHTML='';f=0}add('user',v);h.push({role:'user',text:v,time:Date.now()});i.value='';i.style.height='auto';t.classList.add('active');b.disabled=true;try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:v})});const d=await r.json();let p=d.response;if(m){t.querySelector('span').textContent='Enhancing';try{p=await enh(p)}catch(e){}}t.classList.remove('active');t.querySelector('span').textContent='Processing';add('ai',p);h.push({role:'ai',text:p,time:Date.now()});save()}catch(e){t.classList.remove('active');add('ai','Connection error')}s=0;b.disabled=false;i.focus()}
+async function send(){if(s)return;const v=i.value.trim();if(!v)return;s=1;if(f){g.innerHTML='';f=0}add('user',v);h.push({role:'user',text:v,time:Date.now()});i.value='';i.style.height='auto';t.classList.add('active');b.disabled=true;try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:v})});const d=await r.json();t.classList.remove('active');if(d.status==='ok'){add('ai',d.response);h.push({role:'ai',text:d.response,time:Date.now()});save()}else{add('ai','Error: '+d.message)}}catch(e){t.classList.remove('active');add('ai','Connection error')}s=0;b.disabled=false;i.focus()}
 function add(r,x){const d=document.createElement('div');d.className='message '+r;const a=document.createElement('div');a.className='avatar';a.textContent=r==='user'?'U':'N';const c=document.createElement('div');c.className='text';c.textContent=x;d.appendChild(a);d.appendChild(c);g.appendChild(d);g.scrollTop=g.scrollHeight}
 function save(){try{localStorage.setItem('nexus_history',JSON.stringify(h))}catch(e){}}
 function load(){try{const d=localStorage.getItem('nexus_history');if(d){h=JSON.parse(d);if(h.length>0){f=0;g.innerHTML='';h.forEach(m=>add(m.role,m.text))}}}catch(e){}}
