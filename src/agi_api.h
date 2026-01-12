@@ -34,6 +34,7 @@ private:
     
     std::string json_escape(const std::string& str);
     std::string filter_markers(const std::string& text);
+    std::string sanitize_output(const std::string& raw);
 };
-std::string sanitize_output(const std::string& raw);
+
 #endif // AGI_API_H
