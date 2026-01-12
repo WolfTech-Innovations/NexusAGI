@@ -25,7 +25,7 @@ else
     TARGET := $(OUTPUT_DIR)Nexus
     CXX := clang++
     CXXFLAGS := -std=c++23 -O3 -pthread -march=native
-    LDFLAGS := -lncurses -lm
+    LDFLAGS := -lncurses -lm -lonnxruntime
     OBJ_EXT := .o
     PLATFORM_NAME := Linux (native)
     USE_ZIG := 0
